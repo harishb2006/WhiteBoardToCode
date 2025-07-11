@@ -1,14 +1,24 @@
-# Whiteboard to Code - AI-Powered Component Generator
+# Whiteboard to Code & AI Mentor
 
-Transform your whiteboard drawings into React components using Google's Gemini AI!
+An AI-powered whiteboard application that can generate code from drawings and provide intelligent mentoring with downloadable learning notes.
 
 ## Features
 
-- **Interactive Whiteboard**: Draw shapes, add text, and create layouts
-- **AI Code Generation**: Convert drawings to React TypeScript components
-- **Gemini Integration**: Powered by Google's Gemini AI API
-- **Modern UI**: Built with React, TypeScript, and Tailwind CSS
-- **Instant Preview**: See generated code with syntax highlighting
+### 🎨 Whiteboard Functionality
+- **Drawing Tools**: Pen, rectangles, circles, text, and selection tools
+- **Interactive Canvas**: Draw, edit, and manipulate elements on a responsive canvas
+- **Export Options**: Download your work as SVG, PNG, JPG, or PDF
+
+### 💻 Code Generation Mode
+- **AI-Powered**: Convert whiteboard drawings into React components using Google Gemini AI
+- **Real-time Preview**: See generated code instantly
+- **Smart Analysis**: AI analyzes your drawings and creates appropriate component structures
+
+### 🎓 AI Mentor Mode
+- **Learning Sessions**: Start topic-based learning sessions
+- **Interactive Notes**: Add questions, explanations, and notes during your session
+- **AI-Generated Study Notes**: Download comprehensive learning notes based on your session
+- **Progress Tracking**: Monitor your learning activities and visual interactions
 
 ## Getting Started
 

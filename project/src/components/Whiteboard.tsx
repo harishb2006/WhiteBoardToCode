@@ -1,16 +1,21 @@
-import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import { CanvasElement, Tool } from '../types';
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { CanvasElement, Tool, WhiteboardSettings } from '../types';
 
 interface WhiteboardProps {
   selectedTool: Tool;
   onElementsChange: (elements: CanvasElement[]) => void;
+  settings: WhiteboardSettings;
 }
 
 export interface WhiteboardRef {
   clearCanvas: () => void;
+  getCanvasRef: () => HTMLCanvasElement | null;
+  getElements: () => CanvasElement[];
+  getCanvasDimensions: () => { width: number; height: number };
+  addElement: (element: CanvasElement) => void;
 }
 
-const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, onElementsChange }, ref) => {
+const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, onElementsChange, settings }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -22,9 +27,75 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
     onElementsChange([]);
   };
 
+  const addElement = (element: CanvasElement) => {
+    const newElements = [...elements, element];
+    setElements(newElements);
+    onElementsChange(newElements);
+  };
+
   useImperativeHandle(ref, () => ({
-    clearCanvas
+    clearCanvas,
+    getCanvasRef: () => canvasRef.current,
+    getElements: () => elements,
+    getCanvasDimensions: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { width: 0, height: 0 };
+      const rect = canvas.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    },
+    addElement
   }));
+
+  const drawElement = useCallback((ctx: CanvasRenderingContext2D, element: CanvasElement) => {
+    ctx.strokeStyle = element.color || settings.strokeColor;
+    ctx.lineWidth = element.strokeWidth || settings.strokeWidth;
+    ctx.fillStyle = element.fillColor || settings.fillColor;
+
+    switch (element.type) {
+      case 'path':
+        if (element.data.points && element.data.points.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(element.data.points[0].x, element.data.points[0].y);
+          element.data.points.slice(1).forEach((point: { x: number; y: number }) => {
+            ctx.lineTo(point.x, point.y);
+          });
+          ctx.stroke();
+        }
+        break;
+      case 'rectangle': {
+        const rectWidth = element.dimensions?.width || 100;
+        const rectHeight = element.dimensions?.height || 100;
+        
+        // Fill if fillColor is not transparent
+        if (element.fillColor && element.fillColor !== 'transparent') {
+          ctx.fillRect(element.position.x, element.position.y, rectWidth, rectHeight);
+        }
+        
+        // Stroke
+        ctx.strokeRect(element.position.x, element.position.y, rectWidth, rectHeight);
+        break;
+      }
+      case 'circle': {
+        const radius = element.dimensions?.width || 50;
+        ctx.beginPath();
+        ctx.arc(element.position.x, element.position.y, radius, 0, 2 * Math.PI);
+        
+        // Fill if fillColor is not transparent
+        if (element.fillColor && element.fillColor !== 'transparent') {
+          ctx.fill();
+        }
+        
+        // Stroke
+        ctx.stroke();
+        break;
+      }
+      case 'text':
+        ctx.font = `${settings.fontSize}px Inter, system-ui, sans-serif`;
+        ctx.fillStyle = element.color || settings.strokeColor;
+        ctx.fillText(element.data.text || 'Text', element.position.x, element.position.y);
+        break;
+    }
+  }, [settings]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,11 +113,11 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Set drawing style
+    // Set drawing style based on settings
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = settings.strokeColor;
+    ctx.lineWidth = settings.strokeWidth;
 
     // Draw grid
     drawGrid(ctx, rect.width, rect.height);
@@ -65,7 +136,7 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
       });
       ctx.stroke();
     }
-  }, [elements, currentPath]);
+  }, [elements, currentPath, settings, drawElement]);
 
   const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
     const gridSize = 20;
@@ -87,48 +158,6 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
     }
   };
 
-  const drawElement = (ctx: CanvasRenderingContext2D, element: CanvasElement) => {
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 2;
-
-    switch (element.type) {
-      case 'path':
-        if (element.data.points && element.data.points.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(element.data.points[0].x, element.data.points[0].y);
-          element.data.points.slice(1).forEach((point: { x: number; y: number }) => {
-            ctx.lineTo(point.x, point.y);
-          });
-          ctx.stroke();
-        }
-        break;
-      case 'rectangle':
-        ctx.strokeRect(
-          element.position.x,
-          element.position.y,
-          element.dimensions?.width || 100,
-          element.dimensions?.height || 100
-        );
-        break;
-      case 'circle':
-        ctx.beginPath();
-        ctx.arc(
-          element.position.x,
-          element.position.y,
-          element.dimensions?.width || 50,
-          0,
-          2 * Math.PI
-        );
-        ctx.stroke();
-        break;
-      case 'text':
-        ctx.font = '16px Inter, system-ui, sans-serif';
-        ctx.fillStyle = '#374151';
-        ctx.fillText(element.data.text || 'Text', element.position.x, element.position.y);
-        break;
-    }
-  };
-
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -144,7 +173,15 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
     const pos = getMousePos(e);
     setIsDrawing(true);
 
-    if (selectedTool === 'pen') {
+    if (selectedTool === 'eraser') {
+      // Find and remove elements at this position
+      const elementToRemove = elements.find(element => isPointInElement(pos, element));
+      if (elementToRemove) {
+        const newElements = elements.filter(el => el.id !== elementToRemove.id);
+        setElements(newElements);
+        onElementsChange(newElements);
+      }
+    } else if (selectedTool === 'pen') {
       setCurrentPath([pos]);
     } else if (selectedTool === 'rectangle' || selectedTool === 'circle') {
       const newElement: CanvasElement = {
@@ -153,6 +190,10 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
         data: {},
         position: pos,
         dimensions: { width: 0, height: 0 },
+        timestamp: Date.now(),
+        color: settings.strokeColor,
+        strokeWidth: settings.strokeWidth,
+        fillColor: settings.fillColor,
       };
       setElements(prev => [...prev, newElement]);
     } else if (selectedTool === 'text') {
@@ -163,10 +204,52 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
           type: 'text',
           data: { text },
           position: pos,
+          timestamp: Date.now(),
+          color: settings.strokeColor,
         };
         setElements(prev => [...prev, newElement]);
         onElementsChange([...elements, newElement]);
       }
+    }
+  };
+
+  // Helper function to check if a point is inside an element
+  const isPointInElement = (point: { x: number; y: number }, element: CanvasElement): boolean => {
+    switch (element.type) {
+      case 'rectangle': {
+        const width = element.dimensions?.width || 100;
+        const height = element.dimensions?.height || 100;
+        return point.x >= element.position.x && 
+               point.x <= element.position.x + width &&
+               point.y >= element.position.y && 
+               point.y <= element.position.y + height;
+      }
+      case 'circle': {
+        const radius = element.dimensions?.width || 50;
+        const dx = point.x - element.position.x;
+        const dy = point.y - element.position.y;
+        return Math.sqrt(dx * dx + dy * dy) <= radius;
+      }
+      case 'path': {
+        if (!element.data.points) return false;
+        // Check if point is near any point in the path
+        return element.data.points.some((pathPoint: { x: number; y: number }) => {
+          const dx = point.x - pathPoint.x;
+          const dy = point.y - pathPoint.y;
+          return Math.sqrt(dx * dx + dy * dy) <= 10; // 10px tolerance
+        });
+      }
+      case 'text': {
+        // Simple bounding box check for text
+        const textWidth = (element.data.text?.length || 0) * 10; // Rough estimate
+        const textHeight = 20;
+        return point.x >= element.position.x && 
+               point.x <= element.position.x + textWidth &&
+               point.y >= element.position.y - textHeight && 
+               point.y <= element.position.y;
+      }
+      default:
+        return false;
     }
   };
 
@@ -202,6 +285,9 @@ const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ selectedTool, o
         type: 'path',
         data: { points: currentPath },
         position: currentPath[0],
+        timestamp: Date.now(),
+        color: settings.strokeColor,
+        strokeWidth: settings.strokeWidth,
       };
       const newElements = [...elements, newElement];
       setElements(newElements);
